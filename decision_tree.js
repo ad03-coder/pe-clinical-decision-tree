@@ -2,7 +2,6 @@
  * PE CLINICAL DECISION TREE
  * ─────────────────────────────────────────────────────────────────────────────
  * AHA 2026 Guidelines – Clinical Evaluation of Patients With Suspected Acute PE
- * Source: Volpicelli – UMG
  *
  * ISTRUZIONI PER IL REFINEMENT:
  * Ogni nodo ha un ID univoco e può essere di tipo:
@@ -20,19 +19,17 @@ const PE_DECISION_TREE = {
   // ══════════════════════════════════════════════════════
   // STEP 0 – ENTRY POINT
   // ══════════════════════════════════════════════════════
-
   start: {
     id: "start",
     type: "info",
     title: "Valutazione PE Acuta",
     subtitle: "AHA Guidelines 2026",
     body: "Paziente con sintomi sospetti per Embolia Polmonare Acuta.\n\nProcedi con la valutazione clinica seguendo il percorso guidato.",
-    icon: "🫁", 
+    icon: "🫁",
     cor: null,
     next: "symptoms_check",
-    hint: "Sintomi tipici: dolore toracico pleuritico, dispnea, emottisi, sincope, shock.\nEsame Obiettivo (EO): \ntachicardia, ipotensione, tachipnea, ipossiemia, gonfiore/dolore gambe (DVT)."
+    hint: "Sintomi tipici: dolore toracico pleuritico, dispnea, emottisi, sincope, shock. EO: tachicardia, ipotensione, tachipnea, ipossiemia, gonfiore/dolore gambe (DVT)."
   },
-
 
   // ══════════════════════════════════════════════════════
   // STEP 1 – ANAMNESI & ESAME OBIETTIVO
@@ -51,7 +48,7 @@ const PE_DECISION_TREE = {
   },
 
   // ══════════════════════════════════════════════════════
-  // STEP 2 – SCELTA DEL SCORE
+  // STEP 2 – SCELTA DELLO SCORE
   // ══════════════════════════════════════════════════════
   choose_score: {
     id: "choose_score",
@@ -196,7 +193,7 @@ const PE_DECISION_TREE = {
     cor: "COR 2a",
     cor_color: "#eab308",
     items: [
-      { id: "y1", label: "Segni/sintomi clinici di TVP (trombosi venosa profonda)", points: 1 },
+      { id: "y1", label: "Segni/sintomi clinici di TVP (deep vein thrombosis)", points: 1 },
       { id: "y2", label: "Emottisi", points: 1 },
       { id: "y3", label: "PE è la diagnosi più probabile", points: 1 }
     ],

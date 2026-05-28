@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
   <style>
-    /* ─── TOKENS ─────────────────────────────────────────── */
+ /* ─── TOKENS ─────────────────────────────────────────── */
    /*
     :root {
       --bg:        #0d1117;
@@ -531,7 +531,7 @@
     <div class="logo-icon">🫁</div>
     <div>
       <div class="logo-text">PE Decision Tool</div>
-      <div class="logo-sub">AHA Guidelines 2026 </div>
+      <div class="logo-sub">AHA Guidelines 2026 – UMG</div>
     </div>
   </div>
   <div class="header-actions">
@@ -752,32 +752,32 @@ function renderScore(node) {
       <div class="ddimer-group">
         <label class="ddimer-label">Età paziente (per soglia age-adjusted)</label>
         <div class="age-row">
-          <input class="age-input" type="number" min="18" max="110" placeholder="anni"
+          <input class="age-input" id="age-input-${nid}" type="number" min="18" max="110" placeholder="anni"
             value="${age}"
-            oninput="setDdimer('${nid}','age', this.value)"
+            oninput="updateDdimerLive('${nid}')"
           />
-          ${ageThreshold ? `<span class="age-threshold">⟹ ${ageThreshold}</span>` : ""}
+          <span class="age-threshold" id="age-threshold-${nid}">${ageThreshold ? "⟹ " + ageThreshold : ""}</span>
         </div>
         <label class="ddimer-label">Valore D-Dimero</label>
         <div class="ddimer-row">
-          <input class="ddimer-input" type="number" min="0" placeholder="es. 450"
+          <input class="ddimer-input" id="ddimer-input-${nid}" type="number" min="0" placeholder="es. 450"
             value="${val}"
-            oninput="setDdimer('${nid}','value', this.value)"
+            oninput="updateDdimerLive('${nid}')"
           />
           <span class="ddimer-unit">ng/mL (µg/L)</span>
         </div>
         ${node.hint_age_adjusted ? `<div class="ddimer-hint">ℹ ${node.hint_age_adjusted}</div>` : ""}
+        <div id="ddimer-result-${nid}"></div>
       </div>
     `;
   }
 
-  // Current interpretation
+  // Current interpretation (for non-years scores only — years handled live via updateDdimerLive)
   const currentInterp = node.interpretation ? node.interpretation[state.interpIdx] : null;
   let interpResultHtml = "";
-  if (currentInterp) {
+  if (currentInterp && node.scoreType !== "years") {
     const result = getScoreResult(node, state, nid);
     if (result) {
-      const colors = { "safe": "#3fb950", "warning": "#d29922", "danger": "#f85149" };
       const sev = result.next === "result_very_low_prob" || result.next === "result_pe_excluded" ? "safe" :
                   result.next === "diagnostic_imaging_direct" ? "danger" : "warning";
       interpResultHtml = `
@@ -833,13 +833,70 @@ function setInterpIdx(nid, idx) {
 function setDdimer(nid, field, val) {
   if (!ddimers[nid]) ddimers[nid] = {};
   ddimers[nid][field] = parseFloat(val) || 0;
-  render(history[history.length - 1]);
+}
+
+// Called on every keystroke for D-Dimer/Age inputs — updates only the relevant
+// DOM elements WITHOUT tearing down and recreating the whole card.
+function updateDdimerLive(nid) {
+  const ageEl    = document.getElementById("age-input-" + nid);
+  const ddimerEl = document.getElementById("ddimer-input-" + nid);
+  if (!ageEl || !ddimerEl) return;
+
+  const age  = parseFloat(ageEl.value)    || 0;
+  const dval = parseFloat(ddimerEl.value);
+
+  // Persist state without re-rendering
+  if (!ddimers[nid]) ddimers[nid] = {};
+  ddimers[nid].age   = age;
+  ddimers[nid].value = isNaN(dval) ? undefined : dval;
+
+  // Update age-threshold badge
+  const threshEl = document.getElementById("age-threshold-" + nid);
+  if (threshEl) {
+    if (age >= 50) {
+      threshEl.textContent = "⟹ Soglia age-adjusted: " + (age * 10) + " µg/L";
+      threshEl.style.display = "";
+    } else if (age > 0) {
+      threshEl.textContent = "⟹ Soglia standard: 500 µg/L";
+      threshEl.style.display = "";
+    } else {
+      threshEl.textContent = "";
+    }
+  }
+
+  // Update result preview
+  const resultEl = document.getElementById("ddimer-result-" + nid);
+  if (!resultEl) return;
+
+  const node  = PE_DECISION_TREE[nid];
+  const state = scores[nid] || { items: {}, total: 0, interpIdx: 0 };
+  const result = getScoreResult(node, state, nid);
+
+  // Update continue button state
+  const btnEl = document.getElementById("continue-btn-" + nid);
+  const ok = canSubmit(node, state, nid);
+  if (btnEl) btnEl.style.opacity = ok ? "1" : "0.4";
+
+  if (!result) { resultEl.innerHTML = ""; return; }
+
+  const sev = result.next === "result_very_low_prob" || result.next === "result_pe_excluded" ? "safe" :
+              result.next === "diagnostic_imaging_direct" ? "danger" : "warning";
+  resultEl.innerHTML = `
+    <div class="result-banner banner-${sev}" style="margin-top:8px">
+      <span>${sev === "safe" ? "✅" : sev === "danger" ? "⚠️" : "🔶"}</span>
+      <span>${result.category}</span>
+    </div>
+  `;
 }
 
 function canSubmit(node, state, nid) {
   if (node.ddimer_input) {
-    const dd = ddimers[nid] || {};
-    return dd.value !== undefined && dd.value >= 0 && dd.age > 0;
+    // Prefer live DOM values if inputs exist
+    const ageEl    = document.getElementById("age-input-" + nid);
+    const ddimerEl = document.getElementById("ddimer-input-" + nid);
+    const age  = ageEl    ? parseFloat(ageEl.value)    : (ddimers[nid] || {}).age;
+    const dval = ddimerEl ? parseFloat(ddimerEl.value) : (ddimers[nid] || {}).value;
+    return dval !== undefined && !isNaN(dval) && dval >= 0 && age > 0;
   }
   return true;
 }
@@ -888,7 +945,20 @@ function getScoreResult(node, state, nid) {
 function submitScore(nid) {
   const node = PE_DECISION_TREE[nid];
   const state = scores[nid];
-  if (!canSubmit(node, state, nid)) return;
+
+  // Sync live DOM inputs before evaluating
+  if (node.ddimer_input) {
+    const ageEl    = document.getElementById("age-input-" + nid);
+    const ddimerEl = document.getElementById("ddimer-input-" + nid);
+    if (!ddimers[nid]) ddimers[nid] = {};
+    if (ageEl)    ddimers[nid].age   = parseFloat(ageEl.value)    || 0;
+    if (ddimerEl) ddimers[nid].value = parseFloat(ddimerEl.value);
+  }
+
+  if (!canSubmit(node, state, nid)) {
+    alert("Inserisci età e valore D-Dimero per procedere.");
+    return;
+  }
 
   const result = getScoreResult(node, state, nid);
   if (!result) {
