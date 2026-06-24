@@ -2,15 +2,33 @@
  * PE CLINICAL DECISION TREE
  * ─────────────────────────────────────────────────────────────────────────────
  * AHA 2026 Guidelines – Clinical Evaluation of Patients With Suspected Acute PE
+ * ESC 2019 Guidelines 
  *
- * ISTRUZIONI PER IL REFINEMENT:
+ * ISTRUZIONI PER IL REFINEMENT
+ * ─────────────────────────────────────────────────────────────────────────────
  * Ogni nodo ha un ID univoco e può essere di tipo:
- *   "info"     → schermata informativa / step narrativo
- *   "score"    → calcolo di un punteggio (Wells, Geneva, PERC)
- *   "question" → domanda binaria o multipla
- *   "result"   → esito finale (con severità: "safe" | "warning" | "danger")
+ *   "info"       → schermata informativa / step narrativo
+ *   "score"      → calcolo di un punteggio (Wells, Geneva, PERC, YEARS+DDimero)
+ *   "question"   → scelta multipla senza calcolo punteggio
+ *   "result"     → esito intermedio (con bottone "Continua" verso ctpa_check)
+ *   "ctpa_check" → selezione controindicazioni CTPA + alternative raccomandate
  *
- * I campi "next" e "branches" definiscono la navigazione tra i nodi.
+ * NAVIGAZIONE
+ *   "next"     → nodo successivo (per info, result)
+ *   "branches" → non usato al momento
+ *   Per i nodi "score" la navigazione è definita dentro "interpretation[].rules[].next"
+ *
+ * AGGIUNGERE UN NODO
+ *   1. Aggiungere la chiave in PE_DECISION_TREE con il tipo corretto
+ *   2. Aggiornare il campo "next" del nodo precedente che deve puntarvi
+ *   3. Se è uno score, aggiungere le rules con i "next" verso i nodi successivi
+ *
+ * CONTROINDICAZIONI CTPA (nodo ctpa_check)
+ *   - contraindications.absolute[]  → controindicazioni assolute (id, label)
+ *   - contraindications.relative[]  → controindicazioni relative (id, label)
+ *   - alternatives[]                → alternative raccomandate, ciascuna con:
+ *       best_for: [...id]           → IDs delle controindicazioni per cui è indicata
+ *       subitems: [...]             → voci dettaglio opzionali (es. eco multiorgano)
  * ─────────────────────────────────────────────────────────────────────────────
  */
 
@@ -27,8 +45,23 @@ const PE_DECISION_TREE = {
     body: "Paziente con sintomi sospetti per Embolia Polmonare Acuta.\n\nProcedi con la valutazione clinica seguendo il percorso guidato.",
     icon: "🫁",
     cor: null,
-    next: "symptoms_check",
+    next: "choose_guideline",
     hint: "Sintomi tipici: dolore toracico pleuritico, dispnea, emottisi, sincope, shock. EO: tachicardia, ipotensione, tachipnea, ipossiemia, gonfiore/dolore gambe (DVT)."
+  },
+
+  // ══════════════════════════════════════════════════════
+  // STEP 0bis – SCELTA DELLE LINEE GUIDA DI RIFERIMENTO
+  // ══════════════════════════════════════════════════════
+  choose_guideline: {
+    id: "choose_guideline",
+    type: "question",
+    title: "Seleziona le Linee Guida",
+    body: "Quale percorso diagnostico vuoi seguire?",
+    icon: "📚",
+    options: [
+      { label: "AHA 2026", next: "symptoms_check", desc: "Wells / Geneva / Geneva Semplificato + PERC + YEARS" },
+      { label: "ESC 2019", next: "esc_hemodynamic_check", desc: "Valutazione instabilità emodinamica + Geneva Score (ESC) + D-Dimero" }
+    ]
   },
 
   // ══════════════════════════════════════════════════════
@@ -57,9 +90,9 @@ const PE_DECISION_TREE = {
     body: "Seleziona il tool validato che vuoi utilizzare:",
     icon: "📊",
     options: [
-      { label: "Wells Score", next: "wells_score", desc: "Score più utilizzato in PS/emergenza" },
-      { label: "Revised Geneva Score", next: "geneva_score", desc: "Alternativa validata, senza valutazione soggettiva" },
-      { label: "Simplified Geneva Score", next: "geneva_simple_score", desc: "Versione semplificata del Geneva" }
+      { label: "Wells Score",              next: "wells_score",         desc: "Score più utilizzato in PS/emergenza" },
+      { label: "Revised Geneva Score",     next: "geneva_score",        desc: "Alternativa validata, senza valutazione soggettiva" },
+      { label: "Simplified Geneva Score",  next: "geneva_simple_score", desc: "Versione semplificata del Geneva" }
     ]
   },
 
@@ -72,23 +105,23 @@ const PE_DECISION_TREE = {
     title: "Wells Score per PE",
     icon: "📋",
     items: [
-      { id: "w1", label: "Sintomi clinici di TVP (gonfiore gamba, dolore alla palpazione)", points: 3 },
-      { id: "w2", label: "PE più probabile di diagnosi alternativa", points: 3 },
-      { id: "w3", label: "Frequenza cardiaca > 100 bpm", points: 1.5 },
-      { id: "w4", label: "Immobilizzazione ≥ 3 gg o chirurgia nelle ultime 4 settimane", points: 1.5 },
-      { id: "w5", label: "TVP o PE precedente", points: 1.5 },
-      { id: "w6", label: "Emottisi", points: 1 },
-      { id: "w7", label: "Tumore maligno attivo", points: 1 }
+      { id: "w1", label: "Sintomi clinici di TVP (gonfiore gamba, dolore alla palpazione)", points: 3   },
+      { id: "w2", label: "PE più probabile di diagnosi alternativa",                        points: 3   },
+      { id: "w3", label: "Frequenza cardiaca > 100 bpm",                                   points: 1.5 },
+      { id: "w4", label: "Immobilizzazione ≥ 3 gg o chirurgia nelle ultime 4 settimane",   points: 1.5 },
+      { id: "w5", label: "TVP o PE precedente",                                             points: 1.5 },
+      { id: "w6", label: "Emottisi",                                                        points: 1   },
+      { id: "w7", label: "Tumore maligno attivo",                                           points: 1   }
     ],
     interpretation: [
       { label: "Standard Wells", rules: [
-        { range: [0, 1.9], category: "Bassa (<15%)", next: "perc_check" },
-        { range: [2, 6], category: "Intermedia (15–50%)", next: "ddimer_years" },
-        { range: [6.1, 99], category: "Alta (>50%)", next: "diagnostic_imaging_direct" }
+        { range: [0,   1.9], category: "Bassa (<15%)",           next: "perc_check"              },
+        { range: [2,   6  ], category: "Intermedia (15–50%)",    next: "ddimer_years"             },
+        { range: [6.1, 99 ], category: "Alta (>50%)",            next: "diagnostic_imaging_direct"}
       ]},
       { label: "Modified Wells (dicotomica)", rules: [
-        { range: [0, 4], category: "PE improbabile (≤4)", next: "perc_check" },
-        { range: [4.1, 99], category: "PE probabile (>4)", next: "diagnostic_imaging_direct" }
+        { range: [0,   4  ], category: "PE improbabile (≤4)",    next: "perc_check"              },
+        { range: [4.1, 99 ], category: "PE probabile (>4)",      next: "diagnostic_imaging_direct"}
       ]}
     ],
     scoreType: "wells"
@@ -103,21 +136,21 @@ const PE_DECISION_TREE = {
     title: "Revised Geneva Score",
     icon: "📋",
     items: [
-      { id: "g1", label: "Età > 65 anni", points: 1 },
-      { id: "g2", label: "TVP o PE precedente", points: 3 },
-      { id: "g3", label: "Chirurgia in anestesia generale o frattura arti inferiori nell'ultimo mese", points: 2 },
-      { id: "g4", label: "Tumore maligno attivo", points: 2 },
-      { id: "g5", label: "Dolore unilaterale all'arto inferiore", points: 3 },
-      { id: "g6", label: "Emottisi", points: 2 },
-      { id: "g7", label: "FC 75–94 bpm", points: 3 },
-      { id: "g8", label: "FC ≥ 95 bpm", points: 5 },
-      { id: "g9", label: "Dolore alla palpazione del circolo venoso profondo e edema unilaterale", points: 4 }
+      { id: "g1", label: "Età > 65 anni",                                                                    points: 1 },
+      { id: "g2", label: "TVP o PE precedente",                                                              points: 3 },
+      { id: "g3", label: "Chirurgia in anestesia generale o frattura arti inferiori nell'ultimo mese",       points: 2 },
+      { id: "g4", label: "Tumore maligno attivo",                                                            points: 2 },
+      { id: "g5", label: "Dolore unilaterale all'arto inferiore",                                            points: 3 },
+      { id: "g6", label: "Emottisi",                                                                         points: 2 },
+      { id: "g7", label: "FC 75–94 bpm",                                                                     points: 3 },
+      { id: "g8", label: "FC ≥ 95 bpm",                                                                      points: 5 },
+      { id: "g9", label: "Dolore alla palpazione del circolo venoso profondo e edema unilaterale",           points: 4 }
     ],
     interpretation: [
       { label: "Revised Geneva", rules: [
-        { range: [0, 3], category: "Bassa (<15%)", next: "perc_check" },
-        { range: [4, 10], category: "Intermedia (15–50%)", next: "ddimer_years" },
-        { range: [11, 99], category: "Alta (>50%)", next: "diagnostic_imaging_direct" }
+        { range: [0,  3 ], category: "Bassa (<15%)",         next: "perc_check"              },
+        { range: [4,  10], category: "Intermedia (15–50%)",  next: "ddimer_years"             },
+        { range: [11, 99], category: "Alta (>50%)",          next: "diagnostic_imaging_direct"}
       ]}
     ],
     scoreType: "geneva"
@@ -132,28 +165,28 @@ const PE_DECISION_TREE = {
     title: "Simplified Revised Geneva Score",
     icon: "📋",
     items: [
-      { id: "sg1", label: "Età > 65 anni", points: 1 },
-      { id: "sg2", label: "TVP o PE precedente", points: 1 },
-      { id: "sg3", label: "Chirurgia in anestesia generale o frattura arti inferiori nell'ultimo mese", points: 1 },
-      { id: "sg4", label: "Tumore maligno attivo", points: 1 },
-      { id: "sg5", label: "Dolore unilaterale all'arto inferiore", points: 1 },
-      { id: "sg6", label: "Emottisi", points: 1 },
-      { id: "sg7", label: "FC 75–94 bpm", points: 1 },
-      { id: "sg8", label: "FC ≥ 95 bpm", points: 1 },
-      { id: "sg9", label: "Dolore alla palpazione del circolo venoso profondo e edema unilaterale", points: 1 }
+      { id: "sg1", label: "Età > 65 anni",                                                                    points: 1 },
+      { id: "sg2", label: "TVP o PE precedente",                                                              points: 1 },
+      { id: "sg3", label: "Chirurgia in anestesia generale o frattura arti inferiori nell'ultimo mese",       points: 1 },
+      { id: "sg4", label: "Tumore maligno attivo",                                                            points: 1 },
+      { id: "sg5", label: "Dolore unilaterale all'arto inferiore",                                            points: 1 },
+      { id: "sg6", label: "Emottisi",                                                                         points: 1 },
+      { id: "sg7", label: "FC 75–94 bpm",                                                                     points: 1 },
+      { id: "sg8", label: "FC ≥ 95 bpm",                                                                      points: 1 },
+      { id: "sg9", label: "Dolore alla palpazione del circolo venoso profondo e edema unilaterale",           points: 1 }
     ],
     interpretation: [
       { label: "Simplified Revised Geneva", rules: [
-        { range: [0, 1], category: "Bassa/PE improbabile (<15%)", next: "perc_check" },
-        { range: [2, 4], category: "Intermedia (15–50%)", next: "ddimer_years" },
-        { range: [5, 7], category: "Alta/PE probabile (>50%)", next: "diagnostic_imaging_direct" }
+        { range: [0, 1], category: "Bassa/PE improbabile (<15%)",  next: "perc_check"              },
+        { range: [2, 4], category: "Intermedia (15–50%)",          next: "ddimer_years"             },
+        { range: [5, 7], category: "Alta/PE probabile (>50%)",     next: "diagnostic_imaging_direct"}
       ]}
     ],
     scoreType: "geneva_simple"
   },
 
   // ══════════════════════════════════════════════════════
-  // PERC (solo per probabilità BASSA)
+  // PERC – solo per probabilità BASSA (<15%)
   // ══════════════════════════════════════════════════════
   perc_check: {
     id: "perc_check",
@@ -161,49 +194,50 @@ const PE_DECISION_TREE = {
     title: "Criteri PERC",
     subtitle: "PE Rule Out Criteria",
     icon: "🔍",
-    description: "Applicabile SOLO se probabilità clinica pre-test < 15% (es. Wells < 2).\nSe TUTTI i criteri sono soddisfatti (tutte le risposte sono NO ai fattori di rischio), la probabilità di PE è molto bassa e non sono necessari ulteriori esami.",
+    description: "Applicabile SOLO se probabilità clinica pre-test < 15% (es. Wells < 2).\nSeleziona i criteri PRESENTI nel paziente. Se punteggio = 0 (nessun criterio presente) → PE esclusa senza ulteriori esami.",
     items: [
-      { id: "p1", label: "Età ≥ 50 anni", points: 1, negativeLabel: "Età < 50 anni (PERC OK)" },
-      { id: "p2", label: "FC ≥ 100 bpm", points: 1, negativeLabel: "FC < 100 bpm (PERC OK)" },
-      { id: "p3", label: "SatO₂ < 95% in aria ambiente", points: 1, negativeLabel: "SatO₂ ≥ 95% (PERC OK)" },
-      { id: "p4", label: "Emottisi", points: 1, negativeLabel: "Nessuna emottisi (PERC OK)" },
-      { id: "p5", label: "Uso di estrogeni", points: 1, negativeLabel: "Nessun uso di estrogeni (PERC OK)" },
-      { id: "p6", label: "TVP o PE precedente", points: 1, negativeLabel: "Nessuna TVP/PE prec. (PERC OK)" },
-      { id: "p7", label: "Gonfiore unilaterale alla gamba", points: 1, negativeLabel: "Nessun gonfiore (PERC OK)" },
-      { id: "p8", label: "Chirurgia/trauma con ospedalizzazione nelle ultime 4 settimane", points: 1, negativeLabel: "Nessuna chirurgia/trauma (PERC OK)" }
+      { id: "p1", label: "Età ≥ 50 anni",                                                   points: 1 },
+      { id: "p2", label: "FC ≥ 100 bpm",                                                    points: 1 },
+      { id: "p3", label: "SatO₂ < 95% in aria ambiente",                                   points: 1 },
+      { id: "p4", label: "Emottisi",                                                         points: 1 },
+      { id: "p5", label: "Uso di estrogeni",                                                 points: 1 },
+      { id: "p6", label: "TVP o PE precedente",                                              points: 1 },
+      { id: "p7", label: "Gonfiore unilaterale alla gamba",                                  points: 1 },
+      { id: "p8", label: "Chirurgia/trauma con ospedalizzazione nelle ultime 4 settimane",   points: 1 }
     ],
     interpretation: [
       { label: "PERC", rules: [
-        { range: [0, 0], category: "PERC NEGATIVO – Tutti i criteri soddisfatti", next: "result_very_low_prob" },
-        { range: [1, 99], category: "PERC POSITIVO – Criteri NON soddisfatti", next: "ddimer_years" }
+        { range: [0, 0],  category: "PERC NEGATIVO – Tutti i criteri soddisfatti", next: "result_very_low_prob" },
+        { range: [1, 99], category: "PERC POSITIVO – Almeno un criterio presente", next: "ddimer_years"         }
       ]}
     ],
     scoreType: "perc"
   },
 
   // ══════════════════════════════════════════════════════
-  // D-DIMER + CRITERI YEARS (probabilità intermedia o PERC positivo)
+  // D-DIMERO + CRITERI YEARS
+  // Applicabile in probabilità intermedia o PERC positivo
   // ══════════════════════════════════════════════════════
   ddimer_years: {
     id: "ddimer_years",
     type: "score",
     title: "D-Dimero + Criteri YEARS",
     icon: "🧪",
-    description: "Esegui dosaggio D-Dimero e valuta i criteri YEARS.\n\nI criteri YEARS determinano la soglia di cut-off da applicare.",
+    description: "Esegui dosaggio D-Dimero e valuta i 3 criteri YEARS.\nIl numero di criteri YEARS presenti determina la soglia di cut-off del D-Dimero da applicare.",
     cor: "COR 2a",
     cor_color: "#eab308",
     items: [
       { id: "y1", label: "Segni/sintomi clinici di TVP (deep vein thrombosis)", points: 1 },
-      { id: "y2", label: "Emottisi", points: 1 },
-      { id: "y3", label: "PE è la diagnosi più probabile", points: 1 }
+      { id: "y2", label: "Emottisi",                                            points: 1 },
+      { id: "y3", label: "PE è la diagnosi più probabile",                      points: 1 }
     ],
     ddimer_input: true,
     interpretation: [
       { label: "YEARS + D-Dimero", rules: [
-        { years: 0, ddimer_op: "<", ddimer_val: 1000, category: "0 criteri YEARS e D-Dimero < 1000 ng/mL", next: "result_pe_excluded" },
-        { years: ">=1", ddimer_op: "<", ddimer_val: 500, category: "≥1 criteri YEARS e D-Dimero < 500 ng/mL (o soglia age-adjusted)", next: "result_pe_excluded" },
-        { years: 0, ddimer_op: ">=", ddimer_val: 1000, category: "0 criteri YEARS e D-Dimero ≥ 1000 ng/mL", next: "diagnostic_imaging" },
-        { years: ">=1", ddimer_op: ">=", ddimer_val: 500, category: "≥1 criteri YEARS e D-Dimero ≥ 500 ng/mL (o soglia age-adjusted)", next: "diagnostic_imaging" }
+        { years: 0,    ddimer_op: "<",  ddimer_val: 1000, category: "0 criteri YEARS e D-Dimero < 1000 ng/mL → PE esclusa",               next: "result_pe_excluded"          },
+        { years: ">=1",ddimer_op: "<",  ddimer_val: 500,  category: "≥1 criteri YEARS e D-Dimero < 500 ng/mL (o soglia age-adj.) → PE esclusa", next: "result_pe_excluded"     },
+        { years: 0,    ddimer_op: ">=", ddimer_val: 1000, category: "0 criteri YEARS e D-Dimero ≥ 1000 ng/mL → imaging necessario",        next: "diagnostic_imaging"          },
+        { years: ">=1",ddimer_op: ">=", ddimer_val: 500,  category: "≥1 criteri YEARS e D-Dimero ≥ 500 ng/mL (o soglia age-adj.) → imaging necessario", next: "diagnostic_imaging"}
       ]}
     ],
     scoreType: "years",
@@ -211,27 +245,25 @@ const PE_DECISION_TREE = {
   },
 
   // ══════════════════════════════════════════════════════
-  // DIAGNOSTICA PER IMMAGINI (da D-dimer/YEARS o alta probabilità)
+  // DIAGNOSTICA PER IMMAGINI – Alta probabilità (>50%)
+  // Navigazione diretta senza D-Dimero
   // ══════════════════════════════════════════════════════
   diagnostic_imaging_direct: {
     id: "diagnostic_imaging_direct",
     type: "result",
     severity: "danger",
     title: "Esegui Diagnostica per Immagini",
-    subtitle: "Probabilità Clinica Alta (>50%)",
+    subtitle: "Probabilità Clinica Alta (>50%) – non attendere il D-Dimero",
     icon: "🔬",
     cor: "COR 1",
     cor_color: "#22c55e",
-    body: "La probabilità clinica pre-test è ALTA (>50%).\n\nProcedi DIRETTAMENTE con la diagnostica per immagini senza attendere il D-Dimero.",
-    recommendations: [
-      { text: "CTPA (Angio-TC polmonare)", primary: true, desc: "Prima scelta – ampia disponibilità, eccellente performance diagnostica" },
-      { text: "V/Q scan ± SPECT", primary: false, desc: "Alternativa se CTPA controindicata (allergia mdc, insufficienza renale, gravidanza)" },
-      { text: "Ecocardiografia", primary: false, desc: "NON per diagnosi di PE – utile per valutare disfunzione RV se PE confermata" }
-    ],
-    echo_table: true,
-    next: null
+    body: "La probabilità clinica pre-test è ALTA (>50%).\n\nProcedi DIRETTAMENTE con la diagnostica per immagini. Il D-Dimero non è indicato in questa fascia perché anche valori negativi non escludono la PE con sufficiente affidabilità.\n\nModalità raccomandata: CTPA (Angio-TC polmonare), salvo controindicazioni da verificare nel passo successivo.",
+    next: "ctpa_check"
   },
 
+  // ══════════════════════════════════════════════════════
+  // DIAGNOSTICA PER IMMAGINI – D-Dimero/YEARS positivo
+  // ══════════════════════════════════════════════════════
   diagnostic_imaging: {
     id: "diagnostic_imaging",
     type: "result",
@@ -241,18 +273,607 @@ const PE_DECISION_TREE = {
     icon: "🔬",
     cor: "COR 1",
     cor_color: "#22c55e",
-    body: "I risultati del D-Dimero e/o dei criteri YEARS indicano la necessità di diagnostica per immagini per escludere o confermare la PE.",
-    recommendations: [
-      { text: "CTPA (Angio-TC polmonare)", primary: true, desc: "Prima scelta – ampia disponibilità, eccellente performance diagnostica" },
-      { text: "V/Q scan ± SPECT", primary: false, desc: "Alternativa se CTPA controindicata (allergia mdc, insufficienza renale, gravidanza)" },
-      { text: "Ecocardiografia", primary: false, desc: "NON per diagnosi di PE – utile per valutare disfunzione RV se PE confermata" }
+    body: "I risultati del D-Dimero e/o dei criteri YEARS indicano la necessità di diagnostica per immagini per escludere o confermare la PE.\n\nModalità raccomandata: CTPA (Angio-TC polmonare), salvo controindicazioni da verificare nel passo successivo.",
+    next: "ctpa_check"
+  },
+
+  // ══════════════════════════════════════════════════════
+  // CTPA – SELEZIONE MODALITÀ IMAGING
+  // ══════════════════════════════════════════════════════
+  ctpa_check: {
+    id: "ctpa_check",
+    type: "ctpa_check",
+    title: "Scelta della Modalità di Imaging",
+    subtitle: "CTPA è la prima scelta – verifica le controindicazioni",
+    icon: "🖥️",
+
+    // ── Opzione esplicita "nessuna controindicazione" ───
+    // Mutuamente esclusiva con le checkbox delle controindicazioni.
+    // Se selezionata, conferma CTPA come esito raccomandato.
+    no_contraindications_option: {
+      id: "ci_none",
+      label: "Nessuna delle controindicazioni sopra è presente",
+      result_label: "CTPA (Angio-TC polmonare) – nessuna controindicazione rilevata"
+    },
+
+    // ── Controindicazioni ──────────────────────────────
+    contraindications: {
+      absolute: [
+        { id: "ci_abs1", label: "Indisponibilità della TC (strumento non disponibile in sede)" },
+        { id: "ci_abs2", label: "Shock emodinamico grave (instabilità che impedisce trasferimento in TC)" },
+        { id: "ci_abs3", label: "Allergia grave/documentata al mezzo di contrasto iodato" }
+      ],
+      relative: [
+        { id: "ci_rel1", label: "Gravidanza" },
+        { id: "ci_rel2", label: "Insufficienza renale (GFR ridotto – rischio nefropatia da contrasto)" }
+      ]
+    },
+
+    // ── Alternative raccomandate ───────────────────────
+    // best_for: array di ID controindicazioni per cui questa alternativa è indicata
+    // subitems: voci dettaglio mostrate come sotto-elenco (opzionale)
+    alternatives: [
+      {
+        id: "alt_ctpa",
+        label: "CTPA (Angio-TC polmonare)",
+        icon: "🖥️",
+        desc: "Prima scelta in assenza di controindicazioni: ampia disponibilità, costo relativo contenuto, basso rischio radiante con i protocolli attuali, eccellente performance diagnostica.",
+        best_for: ["ci_none"]
+      },
+      {
+        id: "alt_scinti",
+        label: "Scintigrafia di Perfusione V/Q planare",
+        icon: "☢️",
+        desc: "Indicata in gravidanza (bassa dose fetale), allergia al mdc, insufficienza renale. Eseguita idealmente con la componente ventilatoria per accuratezza ottimale.",
+        best_for: ["ci_rel1", "ci_rel2", "ci_abs3"]
+      },
+      {
+        id: "alt_spect",
+        label: "Scintigrafia V/Q SPECT (± CT low-dose)",
+        icon: "🔬",
+        desc: "Prima scelta rispetto alla scintigrafia planare quando disponibile: maggiore sensibilità, specificità e minore tasso di risultati indeterminati. Possibile combinazione con CT low-dose per accuratezza ulteriore.",
+        best_for: ["ci_rel1", "ci_rel2", "ci_abs3"]
+      },
+      {
+        id: "alt_echo",
+        label: "Ecografia Multiorgano (point-of-care)",
+        icon: "🩻",
+        desc: "Prima scelta in caso di shock o paziente non trasferibile. Approccio integrato con tre componenti complementari:",
+        best_for: ["ci_abs1", "ci_abs2"],
+        subitems: [
+          "Ecocardiografia – dilatazione/disfunzione RV, segno D del setto, stima TAPSE, ipertensione polmonare",
+          "Ecografia polmonare – consolidamenti subpleurici a base pleurica (infarto polmonare), versamento pleurico",
+          "Eco-Doppler venoso – ricerca TVP prossimale agli arti inferiori (compressibilità venosa)"
+        ]
+      }
+    ]
+  },
+
+  // ══════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
+  //  RAMO ESC 2019 — ESC Guidelines for diagnosis and management
+  //  of acute pulmonary embolism (Eur Heart J 2020;41:543-603)
+  // ══════════════════════════════════════════════════════════════
+  // ══════════════════════════════════════════════════════════════
+
+  // ────────────────────────────────────────────────────────────
+  // STEP ESC-1 — Instabilità emodinamica (Tabella 4 ESC)
+  // ────────────────────────────────────────────────────────────
+  esc_hemodynamic_check: {
+    id: "esc_hemodynamic_check",
+    type: "score",
+    title: "Instabilità Emodinamica",
+    subtitle: "Tabella 4 — ESC 2019: definizione di PE ad alto rischio",
+    icon: "🚨",
+    description: "Seleziona le manifestazioni cliniche presenti. È sufficiente UNA delle tre condizioni per definire instabilità emodinamica (PE ad alto rischio).",
+    items: [
+      { id: "h1", label: "Arresto cardiaco (necessità di rianimazione cardiopolmonare)", points: 1 },
+      { id: "h2", label: "Shock ostruttivo: PA sistolica < 90 mmHg o vasopressori necessari per PA ≥ 90 mmHg, con ipoperfusione d'organo (stato mentale alterato; cute fredda e marezzata; oligo/anuria; lattati aumentati)", points: 1 },
+      { id: "h3", label: "Ipotensione persistente: PA sistolica < 90 mmHg o calo ≥ 40 mmHg per > 15 min, non da aritmia di nuova insorgenza, ipovolemia o sepsi", points: 1 }
     ],
-    echo_table: true,
+    interpretation: [
+      { label: "Instabilità emodinamica", rules: [
+        { range: [0, 0], category: "Nessun criterio presente — emodinamicamente stabile", next: "esc_geneva_score" },
+        { range: [1, 99], category: "Almeno un criterio presente — PE ad ALTO RISCHIO (instabile)", next: "esc_bedside_tte" }
+      ]}
+    ],
+    scoreType: "perc"
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // RAMO A — PAZIENTE INSTABILE (Figura 4 ESC)
+  // ────────────────────────────────────────────────────────────
+  esc_bedside_tte: {
+    id: "esc_bedside_tte",
+    type: "info",
+    title: "Ecocardiografia Bedside (TTE)",
+    subtitle: "Figura 4 ESC — Sospetta PE ad alto rischio",
+    icon: "🫀",
+    cor: "Classe I",
+    cor_color: "#22c55e",
+    body: "Nel paziente emodinamicamente instabile, esegui ecocardiografia transtoracica (TTE) al letto del paziente come primo step rapido.\n\nObiettivo: identificare segni di disfunzione del ventricolo destro (RV) per differenziare la PE da altre cause di shock o instabilità (tamponamento cardiaco, sindrome coronarica acuta, dissezione aortica, disfunzione valvolare acuta, ipovolemia).",
+    hint: "Indicazione di Classe I, Livello C: eseguire TTE bedside o CTPA in emergenza (in base a disponibilità e circostanze cliniche) per la diagnosi. Iniziare anticoagulazione con UFH (bolo aggiustato per peso) senza ritardo.",
+    next: "esc_rv_dysfunction"
+  },
+
+  esc_rv_dysfunction: {
+    id: "esc_rv_dysfunction",
+    type: "question",
+    title: "Disfunzione del Ventricolo Destro?",
+    body: "La TTE mostra segni di disfunzione/sovraccarico del RV? (in particolare rapporto RV/LV > 1.0; vedi parametri ecocardiografici dettagliati più avanti)",
+    icon: "❓",
+    options: [
+      { label: "NO — RV normale", next: "esc_search_other_causes_1", desc: "L'assenza di disfunzione RV esclude praticamente la PE come causa dell'instabilità" },
+      { label: "SÌ — segni di disfunzione RV", next: "esc_ctpa_feasible", desc: "Procedi alla verifica di disponibilità CTPA" }
+    ]
+  },
+
+  esc_search_other_causes_1: {
+    id: "esc_search_other_causes_1",
+    type: "result",
+    severity: "safe",
+    title: "Ricerca Altre Cause di Shock o Instabilità",
+    subtitle: "RV normale alla TTE",
+    icon: "🔍",
+    body: "In un paziente con instabilità emodinamica, l'assenza di segni ecocardiografici di disfunzione/sovraccarico del RV esclude praticamente la PE come causa dello shock o dell'instabilità.\n\nL'ecocardiografia può aiutare nella diagnosi differenziale: tamponamento pericardico, disfunzione valvolare acuta, disfunzione severa del VS globale o regionale, dissezione aortica, ipovolemia.",
+    note: "Considerare ecografia venosa bilaterale (CUS) e/o TOE come test ancillari se il quadro resta dubbio.",
+    next: null
+  },
+
+  esc_ctpa_feasible: {
+    id: "esc_ctpa_feasible",
+    type: "ctpa_check",
+    title: "CTPA Immediatamente Disponibile e Fattibile?",
+    subtitle: "Paziente instabile con segni di disfunzione RV — verifica le controindicazioni",
+    icon: "🏥",
+
+    // Stesso pattern del nodo AHA `ctpa_check`, riadattato al contesto di instabilità emodinamica:
+    // qui "nessuna controindicazione" significa che la CTPA È fattibile e va eseguita per confermare la PE;
+    // qualunque controindicazione assoluta/relativa selezionata indica che la CTPA NON è fattibile/disponibile
+    // in tempi compatibili con l'instabilità del paziente, quindi si procede al trattamento bedside.
+    no_contraindications_option: {
+      id: "ci_none_esc",
+      label: "Nessuna controindicazione — CTPA disponibile e fattibile",
+      result_label: "CTPA (Angio-TC polmonare) — procedi con la conferma diagnostica"
+    },
+
+    contraindications: {
+      absolute: [
+        { id: "ci_abs1_esc", label: "Indisponibilità della TC (strumento non disponibile in sede o non accessibile in tempi utili)" },
+        { id: "ci_abs2_esc", label: "Shock emodinamico grave (paziente troppo instabile per il trasferimento in TC)" },
+        { id: "ci_abs3_esc", label: "Allergia grave/documentata al mezzo di contrasto iodato" }
+      ],
+      relative: [
+        { id: "ci_rel1_esc", label: "Gravidanza" },
+        { id: "ci_rel2_esc", label: "Insufficienza renale (GFR ridotto — rischio nefropatia da contrasto)" }
+      ]
+    },
+
+    alternatives: [
+      {
+        id: "alt_ctpa_esc",
+        label: "CTPA (Angio-TC polmonare)",
+        icon: "🖥️",
+        desc: "In assenza di controindicazioni, eseguire CTPA per confermare la PE ad alto rischio.",
+        best_for: ["ci_none_esc"],
+        next: "esc_ctpa_result"
+      },
+      {
+        id: "alt_scinti_esc",
+        label: "Scintigrafia di Perfusione V/Q planare",
+        icon: "☢️",
+        desc: "Considerare se compatibile con i tempi di gestione dell'instabilità: indicata in gravidanza, allergia al mdc, insufficienza renale. In un paziente emodinamicamente instabile, raramente fattibile in urgenza.",
+        best_for: ["ci_rel1_esc", "ci_rel2_esc", "ci_abs3_esc"],
+        next: "esc_treat_high_risk_bedside"
+      },
+      {
+        id: "alt_spect_esc",
+        label: "Scintigrafia V/Q SPECT (± CT low-dose)",
+        icon: "🔬",
+        desc: "Maggiore accuratezza della planare, ma tempi di esecuzione generalmente incompatibili con l'instabilità emodinamica acuta.",
+        best_for: ["ci_rel1_esc", "ci_rel2_esc", "ci_abs3_esc"],
+        next: "esc_treat_high_risk_bedside"
+      },
+      {
+        id: "alt_echo_esc",
+        label: "Ecografia Multiorgano (point-of-care) — confermare con TTE/CUS già eseguite",
+        icon: "🩻",
+        desc: "Scelta appropriata quando la TC non è disponibile o il paziente non è trasferibile: i reperti ecocardiografici di disfunzione RV (già rilevati alla TTE bedside) sono sufficienti per confermare la PE ad alto rischio e procedere al trattamento, senza attendere la CTPA.",
+        best_for: ["ci_abs1_esc", "ci_abs2_esc"],
+        next: "esc_treat_high_risk_bedside",
+        subitems: [
+          "Ecocardiografia — già eseguita: disfunzione RV confermata",
+          "Ecografia polmonare — eventuale supporto per infarto polmonare/versamento pleurico",
+          "Eco-Doppler venoso — ricerca TVP prossimale come ulteriore conferma indiretta di PE"
+        ]
+      }
+    ]
+  },
+
+  esc_ctpa_result: {
+    id: "esc_ctpa_result",
+    type: "question",
+    title: "Risultato della CTPA",
+    body: "Qual è l'esito dell'angio-TC polmonare?",
+    icon: "🔬",
+    options: [
+      { label: "POSITIVA per PE", next: "esc_treat_high_risk", desc: "Conferma PE ad alto rischio" },
+      { label: "NEGATIVA per PE", next: "esc_search_other_causes_2", desc: "PE esclusa, cercare altre cause" }
+    ]
+  },
+
+  esc_treat_high_risk_bedside: {
+    id: "esc_treat_high_risk_bedside",
+    type: "result",
+    severity: "danger",
+    title: "Trattamento PE ad Alto Rischio",
+    subtitle: "Diagnosi bedside — CTPA non fattibile",
+    icon: "⚡",
+    cor: "Classe I/IIa",
+    cor_color: "#22c55e",
+    body: "Il paziente è troppo instabile per il trasferimento e la TC non è disponibile o fattibile.\n\nIn questi casi, i reperti ecocardiografici di disfunzione RV confermano la PE ad alto rischio e si raccomanda terapia di riperfusione emergente, anche senza confema con CTPA.",
+    note: "Reperti più specifici (segno 60/60, segno di McConnell, trombi in cavità destre) rafforzano ulteriormente l'indicazione alla riperfusione emergente.",
+    next: null
+  },
+
+  esc_treat_high_risk: {
+    id: "esc_treat_high_risk",
+    type: "result",
+    severity: "danger",
+    title: "Trattamento PE ad Alto Rischio",
+    subtitle: "PE confermata alla CTPA in paziente instabile",
+    icon: "⚡",
+    cor: "Classe I",
+    cor_color: "#22c55e",
+    body: "CTPA positiva in paziente emodinamicamente instabile con segni di disfunzione RV: diagnosi di PE ad alto rischio confermata.\n\nProcedere immediatamente con trattamento di riperfusione (trombolisi sistemica, embolectomia chirurgica o trattamento percutaneo con catetere, in base a risorse/competenze disponibili) e supporto emodinamico/respiratorio.",
+    next: null
+  },
+
+  esc_search_other_causes_2: {
+    id: "esc_search_other_causes_2",
+    type: "result",
+    severity: "safe",
+    title: "Ricerca Altre Cause di Shock o Instabilità",
+    subtitle: "CTPA negativa per PE",
+    icon: "🔍",
+    body: "La CTPA esclude la PE come causa dell'instabilità emodinamica.\n\nProcedere con la ricerca di altre cause di shock o instabilità (es. tamponamento, sindrome coronarica acuta, dissezione aortica, ipovolemia, sepsi).",
+    next: null
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // RAMO B — PAZIENTE STABILE: Geneva Score ESC (Tabella 5)
+  // ────────────────────────────────────────────────────────────
+  esc_geneva_score: {
+    id: "esc_geneva_score",
+    type: "score",
+    title: "Revised Geneva Score (ESC 2019)",
+    subtitle: "Tabella 5 — versione originale e semplificata",
+    icon: "📋",
+    description: "Versione ESC del Revised Geneva Score. Seleziona i criteri presenti; il punteggio totale userà la colonna 'versione originale'. È disponibile anche l'interpretazione con lo schema a 2 livelli (PE-unlikely / PE-likely).",
+    items: [
+      { id: "eg1", label: "TVP o PE precedente",                                                            points: 3 },
+      { id: "eg2", label: "FC 75–94 bpm",                                                                    points: 3 },
+      { id: "eg3", label: "FC ≥ 95 bpm",                                                                     points: 5 },
+      { id: "eg4", label: "Chirurgia o frattura nel mese precedente",                                       points: 2 },
+      { id: "eg5", label: "Emottisi",                                                                        points: 2 },
+      { id: "eg6", label: "Tumore maligno attivo",                                                           points: 2 },
+      { id: "eg7", label: "Dolore unilaterale ad un arto inferiore",                                         points: 3 },
+      { id: "eg8", label: "Dolore alla palpazione venosa profonda + edema unilaterale",                     points: 4 },
+      { id: "eg9", label: "Età > 65 anni",                                                                   points: 1 }
+    ],
+    interpretation: [
+      { label: "Schema a 3 livelli (originale)", rules: [
+        { range: [0,  3 ], category: "Bassa probabilità clinica (0–3)",        next: "esc_ddimer_test" },
+        { range: [4,  10], category: "Probabilità clinica intermedia (4–10)",  next: "esc_ddimer_test" },
+        { range: [11, 99], category: "Alta probabilità clinica (≥11)",        next: "esc_ctpa_no_dimer" }
+      ]},
+      { label: "Schema a 2 livelli (PE-likely/unlikely)", rules: [
+        { range: [0, 5],  category: "PE improbabile (0–5)",  next: "esc_ddimer_test" },
+        { range: [6, 99], category: "PE probabile (≥6)",     next: "esc_ctpa_no_dimer" }
+      ]}
+    ],
+    scoreType: "geneva"
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // D-Dimero (Figura 5 ESC) — solo per probabilità bassa/intermedia o PE-unlikely
+  // ────────────────────────────────────────────────────────────
+  esc_ddimer_test: {
+    id: "esc_ddimer_test",
+    type: "score",
+    title: "D-Dimero",
+    subtitle: "Figura 5 ESC — probabilità bassa/intermedia o PE-unlikely",
+    icon: "🧪",
+    description: "In pazienti con probabilità clinica bassa/intermedia (o PE-unlikely), il dosaggio del D-Dimero è il primo step. Una soglia fissa standard è 500 ng/mL; in alternativa possono essere usate soglie età-corrette o adattate alla probabilità clinica (criteri YEARS, vedi ramo AHA).\n\nInserisci il valore misurato e l'età del paziente.",
+    cor: "Classe I-IIa",
+    cor_color: "#eab308",
+    items: [],
+    ddimer_input: true,
+    interpretation: [
+      { label: "D-Dimero (soglia 500 ng/mL standard, o age-adjusted)", rules: [
+        { years: 0,    ddimer_op: "<",  ddimer_val: 500, category: "D-Dimero negativo (< soglia) → PE esclusa, nessun trattamento", next: "esc_pe_excluded" },
+        { years: 0,    ddimer_op: ">=", ddimer_val: 500, category: "D-Dimero positivo (≥ soglia) → eseguire CTPA",                  next: "esc_ctpa_low_intermediate" }
+      ]}
+    ],
+    scoreType: "years",
+    hint_age_adjusted: "Soglia età-corretta (alternativa): età < 50 anni → 500 µg/L; età ≥ 50 anni → soglia = età × 10 µg/L. L'inserimento di '0 criteri YEARS' è preimpostato qui poiché in questo ramo ESC il D-dimero non utilizza i criteri YEARS — viene usata solo la soglia indicata."
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // SCELTA MODALITÀ IMAGING — bassa/intermedia probabilità, D-dimero positivo
+  // (stesso pattern del nodo AHA `ctpa_check` / ESC `esc_ctpa_feasible`)
+  // ────────────────────────────────────────────────────────────
+  esc_ctpa_low_intermediate: {
+    id: "esc_ctpa_low_intermediate",
+    type: "ctpa_check",
+    title: "Scelta della Modalità di Imaging",
+    subtitle: "Probabilità bassa/intermedia, D-Dimero positivo — verifica le controindicazioni",
+    icon: "🔬",
+
+    no_contraindications_option: {
+      id: "ci_none_esc_li",
+      label: "Nessuna controindicazione — CTPA disponibile e fattibile",
+      result_label: "CTPA (Angio-TC polmonare) — procedi con la conferma diagnostica"
+    },
+
+    contraindications: {
+      absolute: [
+        { id: "ci_abs1_esc_li", label: "Indisponibilità della TC (strumento non disponibile in sede)" },
+        { id: "ci_abs2_esc_li", label: "Shock emodinamico grave (instabilità che impedisce il trasferimento in TC)" },
+        { id: "ci_abs3_esc_li", label: "Allergia grave/documentata al mezzo di contrasto iodato" }
+      ],
+      relative: [
+        { id: "ci_rel1_esc_li", label: "Gravidanza" },
+        { id: "ci_rel2_esc_li", label: "Insufficienza renale (GFR ridotto — rischio nefropatia da contrasto)" }
+      ]
+    },
+
+    alternatives: [
+      {
+        id: "alt_ctpa_esc_li",
+        label: "CTPA (Angio-TC polmonare)",
+        icon: "🖥️",
+        desc: "Prima scelta in assenza di controindicazioni: ampia disponibilità, eccellente performance diagnostica.",
+        best_for: ["ci_none_esc_li"],
+        next: "esc_ctpa_result_low_intermediate"
+      },
+      {
+        id: "alt_scinti_esc_li",
+        label: "Scintigrafia di Perfusione V/Q planare",
+        icon: "☢️",
+        desc: "Indicata in gravidanza (bassa dose fetale), allergia al mdc, insufficienza renale. Eseguita idealmente con la componente ventilatoria per accuratezza ottimale.",
+        best_for: ["ci_rel1_esc_li", "ci_rel2_esc_li", "ci_abs3_esc_li"],
+        next: "esc_vq_result_low_intermediate"
+      },
+      {
+        id: "alt_spect_esc_li",
+        label: "Scintigrafia V/Q SPECT (± CT low-dose)",
+        icon: "🔬",
+        desc: "Maggiore sensibilità e specificità rispetto alla planare, minore tasso di risultati indeterminati. Prima scelta quando disponibile.",
+        best_for: ["ci_rel1_esc_li", "ci_rel2_esc_li", "ci_abs3_esc_li"],
+        next: "esc_vq_result_low_intermediate"
+      },
+      {
+        id: "alt_echo_esc_li",
+        label: "Ecografia Multiorgano (point-of-care)",
+        icon: "🩻",
+        desc: "Opzione in caso di indisponibilità della TC o paziente non trasferibile. Approccio integrato:",
+        best_for: ["ci_abs1_esc_li", "ci_abs2_esc_li"],
+        next: "esc_echo_result_low_intermediate",
+        subitems: [
+          "Ecocardiografia — disfunzione RV",
+          "Ecografia polmonare — infarto polmonare, versamento pleurico",
+          "Eco-Doppler venoso — ricerca TVP prossimale"
+        ]
+      }
+    ]
+  },
+
+  esc_ctpa_result_low_intermediate: {
+    id: "esc_ctpa_result_low_intermediate",
+    type: "question",
+    title: "Risultato CTPA",
+    subtitle: "Probabilità bassa/intermedia, D-Dimero positivo",
+    icon: "🔬",
+    options: [
+      { label: "PE confermata", next: "esc_treatment_indicated", desc: "CTPA diagnostica per PE a livello segmentale o più proximale" },
+      { label: "Nessuna PE", next: "esc_no_treatment", desc: "CTPA normale: PE esclusa senza ulteriori test" }
+    ]
+  },
+
+  esc_vq_result_low_intermediate: {
+    id: "esc_vq_result_low_intermediate",
+    type: "question",
+    title: "Risultato Scintigrafia V/Q",
+    subtitle: "Alternativa a CTPA per controindicazione relativa/allergia",
+    icon: "☢️",
+    options: [
+      { label: "Alta probabilità per PE", next: "esc_treatment_indicated", desc: "Scintigrafia V/Q ad alta probabilità — diagnostica per PE" },
+      { label: "Normale / bassa probabilità", next: "esc_no_treatment", desc: "Scan normale: PE esclusa senza ulteriori test" },
+      { label: "Non diagnostica / indeterminata", next: "esc_inconclusive_imaging", desc: "Risultato indeterminato: necessari ulteriori accertamenti" }
+    ]
+  },
+
+  esc_echo_result_low_intermediate: {
+    id: "esc_echo_result_low_intermediate",
+    type: "question",
+    title: "Risultato Ecografia Multiorgano",
+    subtitle: "Alternativa a CTPA per controindicazione assoluta",
+    icon: "🩻",
+    options: [
+      { label: "Segni compatibili con PE (disfunzione RV + TVP/altri segni)", next: "esc_treatment_indicated", desc: "Quadro ecografico suggestivo per PE" },
+      { label: "Nessun segno compatibile con PE", next: "esc_inconclusive_imaging", desc: "L'ecografia da sola non esclude la PE con sufficiente sicurezza" }
+    ]
+  },
+
+  esc_inconclusive_imaging: {
+    id: "esc_inconclusive_imaging",
+    type: "result",
+    severity: "warning",
+    title: "Imaging Non Diagnostico",
+    subtitle: "Necessari ulteriori accertamenti",
+    icon: "⚠️",
+    body: "Il test di imaging eseguito in alternativa alla CTPA non ha fornito un risultato conclusivo.\n\nConsiderare: ripetizione del test, esecuzione di CTPA non appena la controindicazione lo consenta, oppure ulteriori tecniche (es. V/Q SPECT se non già eseguita, CUS degli arti inferiori).",
+    next: null
+  },
+
+  // ────────────────────────────────────────────────────────────
+  // SCELTA MODALITÀ IMAGING — alta probabilità / PE-likely, nessun D-dimero necessario
+  // (stesso pattern del nodo AHA `ctpa_check` / ESC `esc_ctpa_feasible`)
+  // ────────────────────────────────────────────────────────────
+  esc_ctpa_no_dimer: {
+    id: "esc_ctpa_no_dimer",
+    type: "ctpa_check",
+    title: "Scelta della Modalità di Imaging",
+    subtitle: "Alta probabilità clinica / PE-likely — D-Dimero non indicato — verifica le controindicazioni",
+    icon: "🔬",
+
+    no_contraindications_option: {
+      id: "ci_none_esc_nd",
+      label: "Nessuna controindicazione — CTPA disponibile e fattibile",
+      result_label: "CTPA (Angio-TC polmonare) — procedi con la conferma diagnostica"
+    },
+
+    contraindications: {
+      absolute: [
+        { id: "ci_abs1_esc_nd", label: "Indisponibilità della TC (strumento non disponibile in sede)" },
+        { id: "ci_abs2_esc_nd", label: "Shock emodinamico grave (instabilità che impedisce il trasferimento in TC)" },
+        { id: "ci_abs3_esc_nd", label: "Allergia grave/documentata al mezzo di contrasto iodato" }
+      ],
+      relative: [
+        { id: "ci_rel1_esc_nd", label: "Gravidanza" },
+        { id: "ci_rel2_esc_nd", label: "Insufficienza renale (GFR ridotto — rischio nefropatia da contrasto)" }
+      ]
+    },
+
+    alternatives: [
+      {
+        id: "alt_ctpa_esc_nd",
+        label: "CTPA (Angio-TC polmonare)",
+        icon: "🖥️",
+        desc: "Prima scelta in assenza di controindicazioni: ampia disponibilità, eccellente performance diagnostica.",
+        best_for: ["ci_none_esc_nd"],
+        next: "esc_ctpa_result_no_dimer"
+      },
+      {
+        id: "alt_scinti_esc_nd",
+        label: "Scintigrafia di Perfusione V/Q planare",
+        icon: "☢️",
+        desc: "Indicata in gravidanza (bassa dose fetale), allergia al mdc, insufficienza renale. Eseguita idealmente con la componente ventilatoria per accuratezza ottimale.",
+        best_for: ["ci_rel1_esc_nd", "ci_rel2_esc_nd", "ci_abs3_esc_nd"],
+        next: "esc_vq_result_no_dimer"
+      },
+      {
+        id: "alt_spect_esc_nd",
+        label: "Scintigrafia V/Q SPECT (± CT low-dose)",
+        icon: "🔬",
+        desc: "Maggiore sensibilità e specificità rispetto alla planare, minore tasso di risultati indeterminati. Prima scelta quando disponibile.",
+        best_for: ["ci_rel1_esc_nd", "ci_rel2_esc_nd", "ci_abs3_esc_nd"],
+        next: "esc_vq_result_no_dimer"
+      },
+      {
+        id: "alt_echo_esc_nd",
+        label: "Ecografia Multiorgano (point-of-care)",
+        icon: "🩻",
+        desc: "Opzione in caso di indisponibilità della TC o paziente non trasferibile. Approccio integrato:",
+        best_for: ["ci_abs1_esc_nd", "ci_abs2_esc_nd"],
+        next: "esc_echo_result_no_dimer",
+        subitems: [
+          "Ecocardiografia — disfunzione RV",
+          "Ecografia polmonare — infarto polmonare, versamento pleurico",
+          "Eco-Doppler venoso — ricerca TVP prossimale"
+        ]
+      }
+    ]
+  },
+
+  esc_ctpa_result_no_dimer: {
+    id: "esc_ctpa_result_no_dimer",
+    type: "question",
+    title: "Risultato CTPA",
+    subtitle: "Alta probabilità clinica / PE-likely",
+    icon: "🔬",
+    options: [
+      { label: "PE confermata", next: "esc_treatment_indicated", desc: "CTPA diagnostica per PE a livello segmentale o più proximale" },
+      { label: "Nessuna PE", next: "esc_no_pe_high_probability", desc: "CTPA negativa, ma probabilità clinica era alta" }
+    ]
+  },
+
+  esc_vq_result_no_dimer: {
+    id: "esc_vq_result_no_dimer",
+    type: "question",
+    title: "Risultato Scintigrafia V/Q",
+    subtitle: "Alta probabilità clinica — alternativa a CTPA",
+    icon: "☢️",
+    options: [
+      { label: "Alta probabilità per PE", next: "esc_treatment_indicated", desc: "Scintigrafia V/Q ad alta probabilità — diagnostica per PE" },
+      { label: "Normale / bassa probabilità", next: "esc_no_pe_high_probability", desc: "Scan negativo, ma probabilità clinica era alta: valutare ulteriori accertamenti" },
+      { label: "Non diagnostica / indeterminata", next: "esc_inconclusive_imaging", desc: "Risultato indeterminato: necessari ulteriori accertamenti" }
+    ]
+  },
+
+  esc_echo_result_no_dimer: {
+    id: "esc_echo_result_no_dimer",
+    type: "question",
+    title: "Risultato Ecografia Multiorgano",
+    subtitle: "Alta probabilità clinica — alternativa a CTPA",
+    icon: "🩻",
+    options: [
+      { label: "Segni compatibili con PE (disfunzione RV + TVP/altri segni)", next: "esc_treatment_indicated", desc: "Quadro ecografico suggestivo per PE" },
+      { label: "Nessun segno compatibile con PE", next: "esc_inconclusive_imaging", desc: "L'ecografia da sola non esclude la PE con sufficiente sicurezza in un paziente ad alta probabilità clinica" }
+    ]
+  },
+
+  esc_no_pe_high_probability: {
+    id: "esc_no_pe_high_probability",
+    type: "result",
+    severity: "warning",
+    title: "CTPA Negativa con Alta Probabilità Clinica",
+    subtitle: "Discrepanza clinico-radiologica",
+    icon: "⚠️",
+    body: "La CTPA è risultata negativa, ma la probabilità clinica pre-test era alta (PE-likely).\n\nIn questi casi, sebbene infrequenti, sono stati riportati risultati falsi-negativi della CTPA. Il rischio tromboembolico a 3 mesi in questi pazienti è risultato comunque basso, ma può essere considerata ulteriore valutazione per immagini prima di escludere definitivamente il trattamento specifico per PE.",
+    note: "Decisione da valutare caso per caso; la necessità e il tipo di ulteriori test restano controversi.",
+    next: null
+  },
+
+  esc_pe_excluded: {
+    id: "esc_pe_excluded",
+    type: "result",
+    severity: "safe",
+    title: "PE Esclusa",
+    subtitle: "D-Dimero negativo",
+    icon: "✅",
+    body: "Il D-Dimero è risultato negativo (sotto la soglia utilizzata) in un paziente con probabilità clinica bassa/intermedia o PE-unlikely.\n\nLa PE è considerata esclusa: nessun trattamento anticoagulante necessario.",
+    next: null
+  },
+
+  esc_no_treatment: {
+    id: "esc_no_treatment",
+    type: "result",
+    severity: "safe",
+    title: "PE Esclusa — Nessun Trattamento",
+    subtitle: "CTPA normale",
+    icon: "✅",
+    body: "La CTPA è normale in un paziente con probabilità clinica bassa/intermedia (o PE-unlikely): la diagnosi di PE è rigettata senza necessità di ulteriori test.",
+    next: null
+  },
+
+  esc_treatment_indicated: {
+    id: "esc_treatment_indicated",
+    type: "result",
+    severity: "warning",
+    title: "PE Confermata — Trattamento Indicato",
+    subtitle: "CTPA positiva",
+    icon: "💊",
+    cor: "Classe I",
+    cor_color: "#22c55e",
+    body: "La CTPA mostra un difetto di riempimento a livello segmentale o più proximale: diagnosi di PE confermata.\n\nProcedere con il trattamento anticoagulante e, contestualmente, con la stratificazione del rischio (parametri clinici, dimensione/funzione del RV, biomarcatori di laboratorio) per definire la necessità di terapia di riperfusione o monitoraggio, oppure l'idoneità a dimissione precoce/trattamento ambulatoriale per i pazienti a basso rischio.",
+    note: "Iniziare l'anticoagulazione senza ritardo già durante il work-up diagnostico se la probabilità clinica è alta o intermedia.",
     next: null
   },
 
   // ══════════════════════════════════════════════════════
-  // RISULTATI FINALI
+  // RISULTATI FINALI – sicuri (PE esclusa / probabilità bassissima)
   // ══════════════════════════════════════════════════════
   result_very_low_prob: {
     id: "result_very_low_prob",
@@ -271,53 +892,34 @@ const PE_DECISION_TREE = {
     type: "result",
     severity: "safe",
     title: "PE Esclusa",
-    subtitle: "D-Dimero e YEARS criteri negativi",
+    subtitle: "D-Dimero e criteri YEARS negativi",
     icon: "✅",
-    body: "La combinazione D-Dimero + criteri YEARS esclude la PE con elevata sicurezza.\n\nNon è necessaria ulteriore diagnostica per immagini.",
-    note: "Considerare diagnosi alternative. Rivalutare se i sintomi peggiorano.",
+    body: "La combinazione D-Dimero + criteri YEARS esclude la PE con elevata affidabilità.\n\nNon è necessaria ulteriore diagnostica per immagini.",
+    note: "Considerare diagnosi alternative. Rivalutare se i sintomi peggiorano o cambiano.",
     next: null
   }
+
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ECHOCARDIOGRAPHY TABLE (Tabella 4 – Disfunzione RV)
-// Usata nei nodi di diagnostic imaging quando PE è confermata
+// ECHO RV TABLE – Tabella 4 (Disfunzione RV all'ecocardiografia)
+// Mostrata nella schermata ecografia multiorgano del nodo ctpa_check
 // ─────────────────────────────────────────────────────────────────────────────
 const ECHO_RV_TABLE = [
-  {
-    parameter: "Dimensione RV",
-    technique: "Apical 4-chamber view (EDD end-diastolico)",
-    definition: "EDD > 30 mm oppure RV basal EDD > 42 mm"
-  },
-  {
-    parameter: "Rapporto RV/LV",
-    technique: "End-diastolic ratio (apicale o subcostale)",
-    definition: "RV/LV > 0.9"
-  },
-  {
-    parameter: "TAPSE",
-    technique: "M-mode, piano longitudinale, apical 4-chamber",
-    definition: "TAPSE < 1.6 cm = anormale"
-  },
-  {
-    parameter: "Doppler – IPA",
-    technique: "Tissue Doppler Imaging",
-    definition: "Tempo di accelerazione polmonare < 90 ms oppure gradiente RV/atriale > 30 mmHg"
-  },
-  {
-    parameter: "Velocità sistolica tricuspide",
-    technique: "Apical o subcostal 4-chamber",
-    definition: "Velocità sistolica > 2.6 m/sec"
-  }
+  { parameter: "Dimensione RV",             technique: "Apical 4-chamber view (EDD end-diastolico)", definition: "EDD > 30 mm  oppure  RV basal EDD > 42 mm"              },
+  { parameter: "Rapporto RV/LV",            technique: "End-diastolic ratio (apicale o subcostale)", definition: "RV/LV > 0.9"                                             },
+  { parameter: "TAPSE",                     technique: "M-mode, piano longitudinale, apical 4-chamber", definition: "TAPSE < 1.6 cm = anormale"                           },
+  { parameter: "Doppler – IP. Acceleration",technique: "Tissue Doppler Imaging",                    definition: "Tempo acc. polmonare < 90 ms  o  gradiente RV/atr. > 30 mmHg" },
+  { parameter: "Velocità sistolica tricusp.",technique: "Apical o subcostal 4-chamber",             definition: "Velocità sistolica > 2.6 m/sec"                           }
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// METADATA
+// METADATA – aggiornare version e lastUpdated ad ogni modifica
 // ─────────────────────────────────────────────────────────────────────────────
 const TREE_METADATA = {
-  version: "1.0.0",
-  source: "AHA 2026 – Adults With Acute Pulmonary Embolism",
-  author: " AD – UMG",
-  lastUpdated: "2026-01-05",
-  disclaimer: "Questo strumento è a supporto decisionale clinico. Non sostituisce il giudizio del medico. Utilizzare sempre in combinazione con la valutazione clinica completa del paziente."
+  version:      "3.2.0",
+  source:       "AHA 2026 – Adults With Acute Pulmonary Embolism / ESC 2019 Guidelines for diagnosis and management of acute pulmonary embolism",
+  author:       "AD – UMG",
+  lastUpdated:  "2026-06-24",
+  disclaimer:   "Questo strumento è a supporto decisionale clinico. Non sostituisce il giudizio del medico. Utilizzare sempre in combinazione con la valutazione clinica completa del paziente."
 };
