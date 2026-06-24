@@ -420,19 +420,5 @@ const TREE_METADATA = {
 
 ---
 
-## Changelog
-
-| Versione | Data       | Modifiche |
-|----------|------------|-----------|
-| 1.0.0    | 2026-01-05 | Release iniziale – Wells, Geneva, PERC, D-Dimero+YEARS |
-| 1.1.0    | 2026-06-18 | Fix input D-Dimero/età: aggiornamento live senza re-render completo |
-| 2.0.0    | 2026-06-18 | Aggiunto nodo `ctpa_check`: controindicazioni CTPA (assolute/relative) e alternative raccomandate (Scintigrafia V/Q planare, SPECT, Ecografia Multiorgano con tabella parametri RV) |
-| 2.1.0    | 2026-06-19 | Aggiunta opzione esplicita "Nessuna delle controindicazioni presenti" (mutuamente esclusiva con le checkbox) che conferma CTPA come esito raccomandato; aggiunta voce CTPA esplicita tra le alternative; i body dei nodi "Esegui Diagnostica per Immagini" indicano già CTPA come modalità raccomandata in attesa di verifica controindicazioni |
-| 3.0.0    | 2026-06-20 | Aggiunto nuovo ramo completo basato su **ESC 2019 Guidelines**: selettore linee guida (AHA/ESC) subito dopo la schermata iniziale; nodo `esc_hemodynamic_check` per il triage instabilità emodinamica (Tabella 4 ESC); ramo "instabile" con algoritmo Figura 4 ESC (TTE bedside → disfunzione RV → CTPA fattibile → trattamento alto rischio); ramo "stabile" con Revised Geneva Score versione ESC originale (Tabella 5, schemi a 3 e 2 livelli) → D-Dimero (Figura 5 ESC, soglia 500 ng/mL) → CTPA → esito. Nessuna modifica al ramo AHA esistente. |
-| 3.1.0    | 2026-06-23 | Il nodo "CTPA Fattibile?" del ramo ESC (`esc_ctpa_feasible`) ora usa la stessa interfaccia a controindicazioni assolute/relative + opzione "nessuna" già presente nel ramo AHA (`ctpa_check`), invece di una semplice domanda sì/no. Generalizzato il codice di rendering (`buildCtpaHtml`, `toggleCi`, `toggleNoneCi` in `index.html`) per supportare più nodi `ctpa_check` indipendenti, con ID delle checkbox namespaced per evitare collisioni di stato. Le card alternative in questo nodo sono ora cliccabili e portano direttamente all'esito appropriato (CTPA di conferma o trattamento bedside immediato). |
-| 3.2.0    | 2026-06-24 | Estesa la schermata di controindicazioni CTPA anche al ramo "stabile" ESC: `esc_ctpa_low_intermediate` (dopo D-Dimero positivo) e `esc_ctpa_no_dimer` (dopo probabilità clinica alta) sono ora nodi `ctpa_check` con le stesse controindicazioni assolute/relative del ramo AHA, invece di semplici domande sull'esito CTPA. Aggiunte 6 nuove schermate di esito dedicate alla modalità di imaging effettivamente scelta (CTPA, scintigrafia V/Q, ecografia multiorgano) per ciascuno dei due contesti, più un nuovo nodo `esc_inconclusive_imaging` per i risultati non diagnostici di V/Q o ecografia. Totale nodi albero: 38. Nessun impatto sui rami AHA e sul ramo ESC instabile già esistenti. |
-
----
-
 *Fonte: AHA 2026 – Adults With Acute Pulmonary Embolism · © 2026 American Heart Association, Inc. and American College of Cardiology Foundation*  
 
