@@ -195,9 +195,9 @@ Soglia D-Dimero determinata dal numero di criteri:
 
 ---
 
-## Score e criteri ESC 2019 (nodi `esc_*`)
+## Score e criteri ESC 2019 
 
-### Instabilità Emodinamica — Tabella 4 ESC
+### Instabilità Emodinamica —  ESC (ref. Tabella 4)
 Definisce la PE ad alto rischio. **Basta UNA** delle tre condizioni:
 
 | Condizione | Criterio |
@@ -209,7 +209,7 @@ Definisce la PE ad alto rischio. **Basta UNA** delle tre condizioni:
 Se presente almeno una condizione → ramo "instabile" (Figura 4 ESC, vedi sopra).  
 Se nessuna condizione → ramo "stabile", si procede con il Geneva Score ESC.
 
-### Revised Geneva Score — Tabella 5 ESC (versione originale)
+### Revised Geneva Score — ESC (versione originale, ref. Tabella 5)
 Diversa dalla versione AHA: punteggi e soglie differenti.
 
 | Criterio | Punti |
@@ -228,7 +228,7 @@ Due possibili interpretazioni, selezionabili nell'interfaccia tramite tab:
 - **Schema a 3 livelli**: Bassa 0–3 · Intermedia 4–10 · Alta ≥11
 - **Schema a 2 livelli**: PE improbabile 0–5 · PE probabile ≥6
 
-### D-Dimero — Figura 5 ESC
+### D-Dimero — ESC (ref. Figura 5)
 Per probabilità bassa/intermedia (o PE-unlikely): soglia fissa standard 500 ng/mL (con possibilità di applicare soglia age-adjusted). Se negativo → PE esclusa; se positivo → si procede alla **scelta della modalità di imaging**.  
 Per probabilità alta (o PE-likely): il D-Dimero **non è indicato** (basso valore predittivo negativo in questa fascia) → si procede direttamente alla **scelta della modalità di imaging**.
 
@@ -251,7 +251,7 @@ A seconda della modalità scelta, l'esito viene raccolto da una schermata dedica
 
 **Imaging non diagnostico**: quando V/Q o ecografia non danno un risultato conclusivo, l'app segnala la necessità di ulteriori accertamenti (ripetizione del test, CTPA quando la controindicazione lo consenta, V/Q SPECT, CUS) senza forzare una conclusione diagnostica.
 
-### Esito CTPA / Scintigrafia / Ecografia — quadro riassuntivo (Figura 5 ESC)
+### Esito CTPA / Scintigrafia / Ecografia — quadro riassuntivo ESC (ref. Figura 5)
 | Scenario | Esito |
 |---|---|
 | Probabilità bassa/interm. + D-Dimero positivo + imaging negativo | PE esclusa, nessun trattamento |
@@ -260,7 +260,7 @@ A seconda della modalità scelta, l'esito viene raccolto da una schermata dedica
 | Probabilità alta + imaging positivo | PE confermata, trattamento indicato |
 | Qualsiasi scenario + imaging non diagnostico (solo V/Q o ecografia) | Necessari ulteriori accertamenti |
 
-### Algoritmo Instabilità Emodinamica — Figura 4 ESC
+### Algoritmo Instabilità Emodinamica — ESC (ref. Figura 4)
 Percorso parallelo per il paziente instabile (`esc_bedside_tte` → `esc_treatment_indicated`):
 
 1. **TTE bedside** — primo step rapido per cercare disfunzione del ventricolo destro (RV)
@@ -272,7 +272,7 @@ Percorso parallelo per il paziente instabile (`esc_bedside_tte` → `esc_treatme
 
 ---
 
-## Scelta della modalità di imaging (nodi `ctpa_check`)
+## Scelta della modalità di imaging 
 
 L'app usa **quattro istanze** dello stesso tipo di nodo `ctpa_check`, con interfaccia identica (checkbox controindicazioni assolute/relative + opzione "nessuna controindicazione" + alternative consigliate):
 
@@ -325,91 +325,7 @@ Ampia disponibilità, eccellente performance diagnostica, bassa dose radiante ri
 
 ---
 
-## Come fare il refinement
-
-### Modificare un criterio di punteggio
-Aprire `decision_tree.js` e trovare il nodo (es. `wells_score`). Modificare i campi `label` o `points` nell'array `items`.
-
-### Modificare le soglie di interpretazione
-Modificare l'array `rules` dentro `interpretation`. Ogni regola ha:
-```js
-{ range: [min, max], category: "testo mostrato", next: "id_nodo_successivo" }
-```
-
-### Aggiungere una controindicazione CTPA
-Nel nodo `ctpa_check`, aggiungere un oggetto a `contraindications.absolute` o `contraindications.relative`:
-```js
-{ id: "ci_nuovo", label: "Descrizione controindicazione" }
-```
-Poi aggiornare il campo `best_for` dell'alternativa rilevante con il nuovo ID.
-
-### L'opzione "Nessuna controindicazione presente"
-Il campo `no_contraindications_option` nel nodo `ctpa_check` definisce la checkbox dedicata che conferma l'assenza di controindicazioni:
-```js
-no_contraindications_option: {
-  id: "ci_none",
-  label: "Testo mostrato nella checkbox",
-  result_label: "Testo descrittivo dell'esito"
-}
-```
-È **mutuamente esclusiva** con tutte le altre checkbox: selezionarla deseleziona automaticamente ogni controindicazione, e viceversa. Quando è selezionata, l'app mostra la card CTPA (`alt_ctpa` nell'array `alternatives`) come modalità raccomandata. Non serve modificare la logica JS per cambiarne il testo: basta editare questo oggetto.
-
-### Aggiungere un'alternativa all'imaging
-Aggiungere un oggetto all'array `alternatives` nel nodo `ctpa_check`:
-```js
-{
-  id: "alt_nuova",
-  label: "Nome alternativa",
-  icon: "🔧",
-  desc: "Descrizione",
-  best_for: ["ci_abs1", "ci_rel1"],   // IDs controindicazioni per cui è indicata
-  subitems: ["Dettaglio 1", "Dettaglio 2"]  // opzionale
-}
-```
-> Nota: l'alternativa con `id: "alt_ctpa"` è speciale — viene mostrata solo quando l'opzione "Nessuna controindicazione" è selezionata, non tramite il normale matching su `best_for`.
-
-### Aggiungere un nuovo nodo informativo
-```js
-nuovo_nodo: {
-  id: "nuovo_nodo",
-  type: "info",
-  title: "Titolo",
-  body: "Testo del corpo",
-  icon: "🔬",
-  cor: "COR 1",             // opzionale
-  cor_color: "#22c55e",     // opzionale
-  next: "id_nodo_successivo",
-  hint: "Testo hint box"    // opzionale
-}
-```
-Aggiornare poi il campo `next` del nodo precedente.
-
-### Modificare/estendere il ramo ESC 2019
-Tutti i nodi del ramo ESC hanno prefisso `esc_` e sono raggruppati in una sezione dedicata di `decision_tree.js` (cercare `RAMO ESC 2019`). Per modificare le soglie del Geneva Score ESC, agire sull'array `items` e `interpretation` del nodo `esc_geneva_score` con le stesse regole descritte sopra per gli score AHA. Per modificare i criteri di instabilità emodinamica (Tabella 4), agire su `esc_hemodynamic_check.items`. Per aggiungere un terzo set di linee guida in futuro, replicare lo stesso pattern: un blocco di nodi con prefisso dedicato, e un'opzione aggiuntiva nel nodo `choose_guideline`.
-
-### Creare un nuovo nodo `ctpa_check` (controindicazioni CTPA)
-Per riusare la stessa interfaccia a checkbox di controindicazioni assolute/relative + opzione "nessuna" in un punto diverso dell'albero, copiare la struttura di `esc_ctpa_feasible` (o `ctpa_check`):
-```js
-nuovo_nodo: {
-  id: "nuovo_nodo",
-  type: "ctpa_check",
-  title: "...", subtitle: "...", icon: "...",
-  no_contraindications_option: { id: "ci_none_X", label: "...", result_label: "..." },
-  contraindications: {
-    absolute: [{ id: "ci_abs1_X", label: "..." }, ...],
-    relative: [{ id: "ci_rel1_X", label: "..." }, ...]
-  },
-  alternatives: [
-    { id: "alt_1_X", label: "...", icon: "...", desc: "...", best_for: ["ci_none_X"], next: "id_nodo_se_nessuna_CI" },
-    { id: "alt_2_X", label: "...", icon: "...", desc: "...", best_for: ["ci_abs1_X"], next: "id_nodo_alternativo" }
-  ]
-}
-```
-**Importante**: usare sempre un suffisso univoco (es. `_X`) per tutti gli ID di controindicazioni e dell'opzione "nessuna", per evitare collisioni con gli ID di altri nodi `ctpa_check` già presenti — lo stato delle checkbox (`ctpaState`) è condiviso a livello di interfaccia ma viene azzerato automaticamente ogni volta che si entra in un nodo di tipo `ctpa_check`.
-
-Il campo `next` su ciascuna `alternatives[]` è opzionale: se presente, la card diventa cliccabile e porta al nodo indicato (comportamento usato in `esc_ctpa_feasible`); se assente, la card resta puramente informativa (comportamento usato nel nodo AHA `ctpa_check`, che termina il percorso).
-
-### Aggiornare i metadati dopo una modifica
+### Metadati
 ```js
 const TREE_METADATA = {
   version:     "3.2",      
